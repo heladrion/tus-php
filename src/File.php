@@ -19,6 +19,9 @@ class File
     /** @const Read binary mode */
     public const READ_BINARY = 'rb';
 
+    /** @const Read write binary mode */
+    public const READ_WRITE_BINARY = 'r+b';
+
     /** @const Append binary mode */
     public const APPEND_BINARY = 'ab';
 
@@ -309,7 +312,7 @@ class File
         }
 
         $input  = $this->open($this->getInputStream(), self::READ_BINARY);
-        $output = $this->open($this->getFilePath(), self::APPEND_BINARY);
+        $output = $this->open($this->getFilePath(), self::READ_WRITE_BINARY);
         $key    = $this->getKey();
 
         try {
