@@ -388,6 +388,10 @@ class File
         if (self::READ_BINARY === $mode && ! file_exists($filePath)) {
             throw new FileException('File not found.');
         }
+        
+        if (self::READ_WRITE_BINARY === $mode && ! file_exists($filePath)) {
+            touch($filePath);
+        }
 
         return true;
     }
