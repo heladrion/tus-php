@@ -706,7 +706,8 @@ class Server extends AbstractTus
 
         $isExpired = empty($contents['expires_at']) || Carbon::parse($contents['expires_at'])->lt(Carbon::now());
 
-        if ($isExpired && $contents['offset'] !== $contents['size']) {
+        //if ($isExpired && $contents['offset'] !== $contents['size']) {
+        if ($isExpired) {
             return true;
         }
 

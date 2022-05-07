@@ -9,7 +9,10 @@ use TusPhp\Config;
 class FileStore extends AbstractCache
 {
     /** @var int */
-    public const LOCK_NONE = 0;
+    private const SET_MODE_WRITE = 0;
+
+    /** @var int */
+    private const SET_MODE_DELETE = 1;
 
     /** @var string */
     protected $cacheDir;
@@ -137,7 +140,7 @@ class FileStore extends AbstractCache
     protected function lock(string $path, int $type = LOCK_SH, callable $cb = null)
     {
         $out    = false;
-        $handle = @fopen($path, File::READ_BINARY);
+        $handle = @fopen($path, File::READ_WRITE_BINARY);
 
         if (false === $handle) {
             return $out;
@@ -186,15 +189,14 @@ class FileStore extends AbstractCache
      *
      * @return int|false
      */
-    public function put(string $path, string $contents, int $lock = LOCK_EX)
+    private function put(string $path, string $contents, int $lock = LOCK_EX)
     {
         return file_put_contents($path, $contents, $lock);
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function set(string $key, $value)
+
+
+    protected function internalSet(string $key, $value, int $mode)
     {
         $cacheKey  = $this->getActualCacheKey($key);
         $cacheFile = $this->getCacheFile();
@@ -203,18 +205,50 @@ class FileStore extends AbstractCache
             $this->createCacheFile();
         }
 
-        return $this->lock($cacheFile, LOCK_EX, function ($handle) use ($cacheKey, $cacheFile, $value) {
+        return $this->lock($cacheFile, LOCK_EX, function ($handle) use ($cacheKey, $cacheFile, $value, $mode) {
             $contents = fread($handle, filesize($cacheFile) ?: 1) ?? '';
             $contents = json_decode($contents, true) ?? [];
 
-            if ( ! empty($contents[$cacheKey]) && \is_array($value)) {
-                $contents[$cacheKey] = $value + $contents[$cacheKey];
-            } else {
-                $contents[$cacheKey] = $value;
+            if($mode === self::SET_MODE_WRITE)
+            {
+                if ( ! empty($contents[$cacheKey]) && \is_array($value)) {
+                    $contents[$cacheKey] = $value + $contents[$cacheKey];
+                } else {
+                    $contents[$cacheKey] = $value;
+                }
+            }
+            elseif($mode === self::SET_MODE_DELETE)
+            {
+                if (isset($contents[$cacheKey])) {
+                    unset($contents[$cacheKey]);
+                }
+                else {
+                    return false;
+                }
             }
 
-            return $this->put($cacheFile, json_encode($contents), self::LOCK_NONE);
+            $position = fseek($handle, 0);
+
+            if($position === -1) {
+                return false;
+            }
+
+            $written = fwrite($handle, json_encode($contents));
+            if($written !== false) {
+                return ftruncate($handle, $written);
+            }
+            else {
+                return false;
+            }
         });
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    public function set(string $key, $value)
+    {
+        return $this->internalSet($key, $value, self::SET_MODE_WRITE);
     }
 
     /**
@@ -222,16 +256,7 @@ class FileStore extends AbstractCache
      */
     public function delete(string $key): bool
     {
-        $cacheKey = $this->getActualCacheKey($key);
-        $contents = $this->getCacheContents();
-
-        if (isset($contents[$cacheKey])) {
-            unset($contents[$cacheKey]);
-
-            return false !== $this->put($this->getCacheFile(), json_encode($contents));
-        }
-
-        return false;
+        return $this->internalSet($key, null, self::SET_MODE_DELETE);
     }
 
     /**
